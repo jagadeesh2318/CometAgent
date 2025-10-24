@@ -163,6 +163,18 @@ class Decision:
 
 # ------------------------- Utility functions ------------------------- #
 
+def _safe_float(value):
+        return float(value.iloc[0]) if isinstance(value, pd.Series) else float(value)
+
+def _ensure_1d(arr: np.ndarray) -> np.ndarray:
+    # If input is a numpy array, squeeze any 1-length dimensions
+    if isinstance(arr, np.ndarray):
+        arr = np.squeeze(arr)
+    # If it's a single-column DataFrame, convert to Series
+    elif isinstance(arr, pd.DataFrame):
+        arr = arr.squeeze("columns")
+    return arr
+
 def _coerce_symbol(portfolio_type: str, s: str) -> str:
     s = s.strip().upper()
     if portfolio_type == "crypto":
@@ -224,8 +236,8 @@ def _download_history(symbol: str, horizon: str) -> pd.DataFrame:
 
 def _rsi(series: pd.Series, window: int = 14) -> pd.Series:
     delta = series.diff()
-    up = np.where(delta > 0, delta, 0.0)
-    down = np.where(delta < 0, -delta, 0.0)
+    up = _ensure_1d(np.where(delta > 0, delta, 0.0))
+    down = _ensure_1d(np.where(delta < 0, -delta, 0.0))
     roll_up = pd.Series(up, index=series.index).ewm(alpha=1/window, adjust=False).mean()
     roll_down = pd.Series(down, index=series.index).ewm(alpha=1/window, adjust=False).mean()
     rs = roll_up / (roll_down + 1e-12)
@@ -257,18 +269,18 @@ def _indicators(df: pd.DataFrame) -> Indicators:
     atr14 = _atr(df, 14)
     last = -1
     return Indicators(
-        close=float(close.iloc[last]),
-        sma50=float(sma50.iloc[last]),
-        sma200=float(sma200.iloc[last]) if not np.isnan(sma200.iloc[last]) else float("nan"),
-        ema12=float(ema12.iloc[last]),
-        ema26=float(ema26.iloc[last]),
-        macd=float(macd.iloc[last]),
-        macd_signal=float(macd_signal.iloc[last]),
-        rsi14=float(rsi14.iloc[last]),
-        bb_mid=float(bb_mid.iloc[last]),
-        bb_up=float(bb_up.iloc[last]),
-        bb_dn=float(bb_dn.iloc[last]),
-        atr14=float(atr14.iloc[last])
+        close=_safe_float(close.iloc[last]),
+        sma50=_safe_float(sma50.iloc[last]),
+        sma200=_safe_float(sma200.iloc[last]) if not np.isnan(_safe_float(sma200.iloc[last])) else float("nan"),
+        ema12=_safe_float(ema12.iloc[last]),
+        ema26=_safe_float(ema26.iloc[last]),
+        macd=_safe_float(macd.iloc[last]),
+        macd_signal=_safe_float(macd_signal.iloc[last]),
+        rsi14=_safe_float(rsi14.iloc[last]),
+        bb_mid=_safe_float(bb_mid.iloc[last]),
+        bb_up=_safe_float(bb_up.iloc[last]),
+        bb_dn=_safe_float(bb_dn.iloc[last]),
+        atr14=_safe_float(atr14.iloc[last])
     )
 
 def _score_ta(ind: Indicators, horizon: str) -> Tuple[float,str]:
