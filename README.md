@@ -1,6 +1,6 @@
-# CometAgent - Agentic Trading Signal Generator
+# CometAgent - Perplexity Comet Trading Signal Generator
 
-An intelligent trading signal generator that analyzes stocks and cryptocurrencies using technical analysis, news sentiment, and social media sentiment to produce actionable trading recommendations. The application generates browser-automation prompts specifically designed for AI agents like Perplexity Comet and ChatGPT Atlas to execute trades on popular brokerage platforms.
+An intelligent trading signal generator that analyzes stocks and cryptocurrencies using technical analysis, news sentiment, and social media sentiment to produce actionable trading recommendations. The application generates browser-automation prompts specifically optimized for Perplexity Comet browser to execute trades on popular brokerage platforms.
 
 ## Overview
 
@@ -42,9 +42,11 @@ CometAgent combines multiple data sources and analysis techniques to generate co
    - Calculates target percentage allocation changes
    - Provides detailed rationale for each recommendation
 
-6. **Agentic Prompt Generation**:
+6. **Comet Browser Optimization**:
    - Creates platform-specific browser automation prompts
-   - Supports both Comet and Atlas AI agents
+   - Optimized for Perplexity Comet autonomous execution
+   - Voice-command friendly prompt generation
+   - Leverages Coinbase partnership for real-time crypto data
    - Includes step-by-step execution instructions
    - Handles order types (Market/Limit) and risk management
 
@@ -207,12 +209,13 @@ Contains detailed analysis results:
 - Final decision and target allocation change
 - Detailed reasoning for each signal
 
-### 2. Agentic Prompts (`prompts_YYYYMMDD_HHMMSS.txt`)
-Contains browser automation instructions:
-- **Comet Prompts**: Structured action plans for Perplexity Comet
-- **Atlas Prompts**: Step-by-step runbooks for ChatGPT Atlas
-- Platform-specific navigation instructions
-- Risk management and confirmation steps
+### 2. Comet Browser Prompts (`prompts_YYYYMMDD_HHMMSS.txt`)
+Contains browser automation instructions optimized for Perplexity Comet:
+- **Voice-Command Ready**: Natural language prompts for voice execution
+- **Autonomous Workflows**: Complete trading sequences for hands-free operation
+- **Platform-Specific Instructions**: Tailored for each brokerage platform
+- **Coinbase Integration**: Leverages Perplexity's official partnership
+- **Risk Management**: Built-in safety checks and confirmation steps
 
 ## Data Sources
 

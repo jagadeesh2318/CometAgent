@@ -1,7 +1,7 @@
-# Comet Browser Trading Agent Optimization Guide
+# Comet Browser Trading Agent - Complete Implementation Guide
 
 ## Overview
-This guide documents the specific optimizations made to the CometAgent trading system for Perplexity's Comet browser, based on research into Comet's unique capabilities and trading platform integrations.
+This guide documents the complete Comet-only implementation of the CometAgent trading system for Perplexity's Comet browser. The system has been optimized exclusively for Comet's autonomous execution capabilities, removing all Atlas dependencies for a streamlined experience.
 
 ## Key Research Findings
 
@@ -13,30 +13,34 @@ This guide documents the specific optimizations made to the CometAgent trading s
 - **Context-aware AI**: Understands current page content and financial data
 - **Multi-platform Support**: Works across major trading platforms
 
-### Comet vs Atlas Comparison
-- **Comet**: Better for exploration, research, and autonomous execution
-- **Atlas**: Better for step-by-step instruction following and productivity workflows
-- **Comet Advantages**: Faster adaptation, free to use, better for voice commands
-- **Atlas Advantages**: Deeper ChatGPT integration, agent mode for complex tasks
+### Why Comet-Only Implementation
+- **Autonomous Execution**: Comet's ability to execute multi-step workflows without intervention
+- **Voice Command Optimization**: Natural language processing for hands-free trading
+- **Real-time Integration**: Official Coinbase partnership for live market data
+- **Simplified Architecture**: Single browser target reduces complexity and improves reliability
+- **Free Access**: No subscription requirements for core functionality
 
 ## Optimization Strategies Implemented
 
-### 1. Prompt Structure Optimization
-**Before (Generic):**
+### 1. Comet-Native Prompt Structure
+**Optimized Structure:**
 ```
-You are an agentic browser with keyboard/mouse control...
-Task: Execute a BUY for AAPL...
-```
-
-**After (Comet-Optimized):**
-```
+COMET TRADING COMMAND
 Execute buy order for AAPL on Coinbase.
 
 Trading parameters:
 • Action: BUY
 • Symbol: AAPL
 • Order type: MARKET
-...
+• Portfolio allocation: 2.0% of total account value
+
+EXECUTION WORKFLOW:
+→ Navigate to AAPL trading page
+→ Select Buy option with real-time pricing
+→ Calculate position size from account balance
+→ Confirm trade with integrated verification
+
+VOICE COMMAND: "Execute buy order for AAPL using 2.0% portfolio allocation on coinbase"
 ```
 
 ### 2. Voice-Command Friendly Format
