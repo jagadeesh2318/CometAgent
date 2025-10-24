@@ -3,14 +3,22 @@
 """
 agentic_trader.py
 Generate trading signals (stocks or crypto) and agentic-execution prompts
-for Perplexity Comet / ChatGPT Atlas on popular broker platforms.
+optimized specifically for Perplexity Comet browser automation.
+Also supports ChatGPT Atlas on popular broker platforms.
+
+COMET OPTIMIZATION FEATURES:
+- Voice-command friendly prompts
+- Autonomous workflow execution
+- Real-time Coinbase integration (via Perplexity partnership)
+- Context-aware trading instructions
+- Streamlined no-click execution patterns
 
 Usage
 -----
 python agentic_trader.py \
   --portfolio-type stocks \
   --horizon short \
-  --platform fidelity \
+  --platform coinbase \
   --file my_portfolio.csv
 
 Inputs
@@ -455,10 +463,30 @@ def _prompt_for_platform(platform: str, broker_action: str, symbol: str,
                          limit_hint: Optional[float] = None) -> Dict[str,str]:
     """
     Return dict with 'comet' and 'atlas' prompts tailored to the platform.
-    We assume the user is already logged in; the agent should verify and ask
-    before submitting, and read back the confirmation.
+    Comet prompts are optimized for voice commands and autonomous execution.
+    Atlas prompts remain instruction-based for step-by-step execution.
     """
-    base_directive = textwrap.dedent(f"""
+    # Comet-optimized base directive - action-oriented and conversational
+    comet_base = textwrap.dedent(f"""
+    Execute {broker_action.lower()} order for {symbol} on {platform.title()}.
+
+    Trading parameters:
+    • Action: {broker_action.upper()}
+    • Symbol: {symbol}
+    • Order type: {order_type.upper()}
+    • Portfolio allocation: {abs(target_pct_delta):.1f}% of total account value
+    • Time-in-force: DAY order
+
+    Execution requirements:
+    • Use live market price from platform
+    • Calculate position size from account balance
+    • Pause for 2FA if prompted - ask user for confirmation
+    • Verify order details before submission
+    • Confirm execution and provide order summary
+    """).strip()
+
+    # Atlas base directive - detailed instructions
+    atlas_base = textwrap.dedent(f"""
     You are an agentic browser with keyboard/mouse control. Assume I'm already logged in.
     Task: Execute a {broker_action.upper()} for {symbol}.
     Constraints:
@@ -470,8 +498,68 @@ def _prompt_for_platform(platform: str, broker_action: str, symbol: str,
     - Confirmation: after placing the order, open the Orders/History page and read back the filled/queued order details (symbol, action, qty, price, timestamp).
     """).strip()
 
-    # Platform-specific micro-instructions (selectors vary; keep generic but actionable)
-    steps = {
+    # Platform-specific instructions optimized for Comet vs Atlas
+    comet_steps = {
+        "coinbase": f"""
+🚀 COMET-OPTIMIZED for Coinbase Partnership:
+Access live {symbol} data through Perplexity integration. Execute {broker_action.lower()} order:
+→ Use built-in Coinbase market data for {symbol} price analysis
+→ Navigate to Coinbase trading interface
+→ Search and select "{symbol}"
+→ Choose {"Buy" if broker_action.lower() in ["buy","strong buy"] else "Sell"} with real-time pricing
+→ Set order type: {order_type.title()}
+→ Calculate position: account_balance × {abs(target_pct_delta)/100:.3f} ÷ live_price
+→ Leverage Comet's autonomous execution for seamless order placement
+→ Confirm trade with integrated verification system
+        """,
+        "fidelity": f"""
+Go to Fidelity trading page for {symbol}. Execute {broker_action.lower()}:
+→ Navigate to Trade > Stocks/ETFs
+→ Enter symbol: {symbol}
+→ Select {"BUY" if broker_action.lower().startswith("buy") else "SELL"} action
+→ Set order type: {order_type.title()}
+→ Calculate quantity: (account_value × {abs(target_pct_delta)/100:.3f}) ÷ live_price
+→ Set time-in-force: DAY
+→ Preview and place order
+        """,
+        "schwab": f"""
+Access Schwab trading for {symbol}. Place {broker_action.lower()} order:
+→ Go to Trade > Stocks & ETFs
+→ Symbol: {symbol}, Action: {"Buy" if broker_action.lower().startswith("buy") else "Sell"}
+→ Order type: {order_type.title()}
+→ Shares from {abs(target_pct_delta):.1f}% portfolio allocation
+→ Time-in-force: DAY
+→ Review and place order
+        """,
+        "etrade": f"""
+Navigate to E*TRADE for {symbol} trading. Execute {broker_action.lower()}:
+→ Access Trading > Stocks/ETFs
+→ Symbol: {symbol}
+→ Action: {"Buy" if broker_action.lower().startswith("buy") else "Sell"}
+→ Order: {order_type.title()}
+→ Calculate quantity from {abs(target_pct_delta):.1f}% allocation
+→ Set TIF: DAY, Preview and place
+        """,
+        "robinhood": f"""
+Open {symbol} on Robinhood. Place {broker_action.lower()} order:
+→ Search and select {symbol}
+→ Tap Trade > {"Buy" if broker_action.lower().startswith("buy") else "Sell"}
+→ Switch to {order_type.title()} order
+→ Calculate: portfolio_value × {abs(target_pct_delta)/100:.3f} = order_amount
+→ Review order details and submit
+        """,
+        "ibkr": f"""
+Access IBKR order ticket for {symbol}. Execute {broker_action.lower()}:
+→ Client Portal > Trade > Order Ticket
+→ Symbol: {symbol}
+→ Side: {"BUY" if broker_action.lower().startswith("buy") else "SELL"}
+→ Type: {"MKT" if order_type=='market' else "LMT"}
+→ Calculate quantity from target allocation
+→ TIF: DAY, Submit and transmit
+        """,
+    }
+
+    atlas_steps = {
         "coinbase": f"""
             1) Navigate to Trade → Search, find "{symbol}".
             2) Click {"'Buy'" if broker_action.lower() in ["buy","strong buy"] else "'Sell'"}.
@@ -509,28 +597,46 @@ def _prompt_for_platform(platform: str, broker_action: str, symbol: str,
     }
 
     plat = _normalize_platform(platform)
-    step_text = steps.get(plat, f"""
+
+    # Get platform-specific steps for each browser
+    comet_step_text = comet_steps.get(plat, f"""
+Access {platform} trading for {symbol}. Execute {broker_action.lower()}:
+→ Open order ticket for {symbol}
+→ Select {"BUY" if broker_action.lower().startswith("buy") else "SELL"} action
+→ Set order type: {order_type.title()}
+→ Calculate quantity from {abs(target_pct_delta):.1f}% of account value
+→ Set TIF: DAY, Preview and submit
+    """)
+
+    atlas_step_text = atlas_steps.get(plat, f"""
         1) Open the order ticket for {symbol}.
         2) Choose {"BUY" if broker_action.lower().startswith("buy") else "SELL"}; {"Market" if order_type=='market' else "Limit"}.
         3) Compute quantity from {abs(target_pct_delta):.1f}% of account value; TIF DAY → Preview → Submit.
     """)
 
-    comet = f"""COMET ACTION PLAN
-{base_directive}
+    # Comet prompt - optimized for voice commands and autonomous execution
+    comet = f"""COMET TRADING COMMAND
+{comet_base}
 
-Execution steps:
-{textwrap.dedent(step_text).strip()}
+EXECUTION WORKFLOW:
+{textwrap.dedent(comet_step_text).strip()}
 
-Quality checks:
-- Verify symbol/ticker matches exactly "{symbol}".
-- Avoid duplicate submission; ensure exactly one order is placed.
-- Summarize result in bullet points including execution price and order ID.
+COMPLETION CHECKLIST:
+✓ Verify symbol matches: {symbol}
+✓ Confirm order type: {order_type.upper()}
+✓ Validate allocation: {abs(target_pct_delta):.1f}% of portfolio
+✓ Check order status and provide execution summary
+✓ Report: symbol, action, quantity, price, order ID, timestamp
+
+VOICE COMMAND: "Execute {broker_action.lower()} order for {symbol} using {abs(target_pct_delta):.1f}% portfolio allocation on {platform}"
 """
+
+    # Atlas prompt - detailed step-by-step instructions
     atlas = f"""ATLAS RUNBOOK
 Goal: {broker_action} {symbol} using {platform.title()} with {order_type.upper()} order for ≈{abs(target_pct_delta):.1f}% of account value.
 
 Steps (be explicit, wait for UI loads, and confirm each field):
-{textwrap.dedent(step_text).strip()}
+{textwrap.dedent(atlas_step_text).strip()}
 
 After submission: navigate to Orders/History, extract and state: symbol, side, qty, order type, limit/exec price, timestamp, status.
 """
