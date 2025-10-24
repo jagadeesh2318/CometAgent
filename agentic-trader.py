@@ -3,14 +3,21 @@
 """
 agentic_trader.py
 Generate trading signals (stocks or crypto) and agentic-execution prompts
-for Perplexity Comet / ChatGPT Atlas on popular broker platforms.
+optimized specifically for Perplexity Comet browser automation.
+
+COMET OPTIMIZATION FEATURES:
+- Voice-command friendly prompts
+- Autonomous workflow execution
+- Real-time Coinbase integration (via Perplexity partnership)
+- Context-aware trading instructions
+- Streamlined no-click execution patterns
 
 Usage
 -----
 python agentic_trader.py \
   --portfolio-type stocks \
   --horizon short \
-  --platform fidelity \
+  --platform coinbase \
   --file my_portfolio.csv
 
 Inputs
@@ -25,7 +32,7 @@ Portfolio file (.csv or .xlsx) with columns (case-insensitive):
 Outputs
 -------
 - Console report (signals + reasoning)
-- prompts_{timestamp}.txt  -> copy/paste-able agentic prompts per action
+- prompts_{timestamp}.txt  -> copy/paste-able Comet prompts per action
 - signals_{timestamp}.csv  -> tabular summary of scores and decisions
 
 Dependencies (install as needed)
@@ -37,6 +44,7 @@ Notes
 - News sentiment pulls from Yahoo Finance via yfinance.get_news() when available,
   and can optionally blend in RSS (feedparser) and X posts (snscrape) if installed.
 - For crypto tickers, symbols like 'BTC'/'ETH' are mapped to 'BTC-USD'/'ETH-USD' for prices.
+- Optimized for Perplexity Comet browser's autonomous execution capabilities.
 - This is NOT financial advice; it's a research tool to aid your process.
 """
 
@@ -464,90 +472,122 @@ def _normalize_platform(p: str) -> str:
 def _prompt_for_platform(platform: str, broker_action: str, symbol: str,
                          target_pct_delta: float, horizon: str,
                          order_type: str = "market",
-                         limit_hint: Optional[float] = None) -> Dict[str,str]:
+                         limit_hint: Optional[float] = None) -> str:
     """
-    Return dict with 'comet' and 'atlas' prompts tailored to the platform.
-    We assume the user is already logged in; the agent should verify and ask
-    before submitting, and read back the confirmation.
+    Return Comet prompt tailored to the platform.
+    Optimized for voice commands and autonomous execution.
     """
+    # Comet-optimized base directive - action-oriented and conversational
     base_directive = textwrap.dedent(f"""
-    You are an agentic browser with keyboard/mouse control. Assume I'm already logged in.
-    Task: Execute a {broker_action.upper()} for {symbol}.
-    Constraints:
-    - Order type: {order_type.upper()}
-    - Target allocation change: {target_pct_delta:+.1f}% of total account value (compute from account summary).
-    - Time-in-force: DAY unless exchange/platform defaults require otherwise.
-    - Price source: use the live quote shown on the platform. If LIMIT, set limit {"≈ "+str(limit_hint) if limit_hint else "near the mid-price"}.
-    - Risk prompts: if two-factor auth is required, pause and ask me to confirm or provide code; do NOT attempt to bypass.
-    - Confirmation: after placing the order, open the Orders/History page and read back the filled/queued order details (symbol, action, qty, price, timestamp).
+    Execute {broker_action.lower()} order for {symbol} on {platform.title()}.
+
+    Trading parameters:
+    • Action: {broker_action.upper()}
+    • Symbol: {symbol}
+    • Order type: {order_type.upper()}
+    • Portfolio allocation: {abs(target_pct_delta):.1f}% of total account value
+    • Time-in-force: DAY order
+
+    Execution requirements:
+    • Use live market price from platform
+    • Calculate position size from account balance
+    • Pause for 2FA if prompted - ask user for confirmation
+    • Verify order details before submission
+    • Confirm execution and provide order summary
     """).strip()
 
-    # Platform-specific micro-instructions (selectors vary; keep generic but actionable)
-    steps = {
+    # Platform-specific instructions optimized for Comet
+    platform_steps = {
         "coinbase": f"""
-            1) Navigate to Trade → Search, find "{symbol}".
-            2) Click {"'Buy'" if broker_action.lower() in ["buy","strong buy"] else "'Sell'"}.
-            3) Choose {"'Market'" if order_type=='market' else "'Limit'"} order.
-            4) Calculate notional = ({abs(target_pct_delta):.1f}% of account value); divide by live price to get quantity.
-            5) Enter amount, click Preview, then Confirm {"Buy" if broker_action.lower().startswith("buy") else "Sell"}.
+🚀 COMET-OPTIMIZED for Coinbase Partnership:
+Access live {symbol} data through Perplexity integration. Execute {broker_action.lower()} order:
+→ Use built-in Coinbase market data for {symbol} price analysis
+→ Navigate to Coinbase trading interface
+→ Search and select "{symbol}"
+→ Choose {"Buy" if broker_action.lower() in ["buy","strong buy"] else "Sell"} with real-time pricing
+→ Set order type: {order_type.title()}
+→ Calculate position: account_balance × {abs(target_pct_delta)/100:.3f} ÷ live_price
+→ Leverage Comet's autonomous execution for seamless order placement
+→ Confirm trade with integrated verification system
         """,
         "fidelity": f"""
-            1) Go to Trade → Stocks/ETFs (web).
-            2) Symbol: {symbol}. Action: {"BUY" if broker_action.lower().startswith("buy") else "SELL"}.
-            3) Order type: {"Market" if order_type=='market' else "Limit"}; {"set Limit ≈ mid" if order_type!='market' else "no price field needed"}.
-            4) Quantity: compute shares = round((account_value*{abs(target_pct_delta)/100:.4f})/live_price, 0).
-            5) Time-in-force: DAY. Click Preview → Place Order.
+Go to Fidelity trading page for {symbol}. Execute {broker_action.lower()}:
+→ Navigate to Trade > Stocks/ETFs
+→ Enter symbol: {symbol}
+→ Select {"BUY" if broker_action.lower().startswith("buy") else "SELL"} action
+→ Set order type: {order_type.title()}
+→ Calculate quantity: (account_value × {abs(target_pct_delta)/100:.3f}) ÷ live_price
+→ Set time-in-force: DAY
+→ Preview and place order
         """,
         "schwab": f"""
-            1) Trade → Stocks & ETFs.
-            2) Symbol {symbol}; Action {"Buy" if broker_action.lower().startswith("buy") else "Sell"}; Order: {"Market" if order_type=='market' else "Limit"}.
-            3) Qty from {abs(target_pct_delta):.1f}% allocation; TIF DAY → Review → Place.
+Access Schwab trading for {symbol}. Place {broker_action.lower()} order:
+→ Go to Trade > Stocks & ETFs
+→ Symbol: {symbol}, Action: {"Buy" if broker_action.lower().startswith("buy") else "Sell"}
+→ Order type: {order_type.title()}
+→ Shares from {abs(target_pct_delta):.1f}% portfolio allocation
+→ Time-in-force: DAY
+→ Review and place order
         """,
         "etrade": f"""
-            1) Trading → Stocks/ETFs.
-            2) Enter {symbol}, {"Buy" if broker_action.lower().startswith("buy") else "Sell"}, {"Market" if order_type=='market' else "Limit"}.
-            3) Compute qty from target allocation, set TIF DAY → Preview → Place.
+Navigate to E*TRADE for {symbol} trading. Execute {broker_action.lower()}:
+→ Access Trading > Stocks/ETFs
+→ Symbol: {symbol}
+→ Action: {"Buy" if broker_action.lower().startswith("buy") else "Sell"}
+→ Order: {order_type.title()}
+→ Calculate quantity from {abs(target_pct_delta):.1f}% allocation
+→ Set TIF: DAY, Preview and place
         """,
         "robinhood": f"""
-            1) Search {symbol} → Trade → {"Buy" if broker_action.lower().startswith("buy") else "Sell"}.
-            2) Switch to {"'Market'" if order_type=='market' else "'Limit'"} order.
-            3) Use notional = {abs(target_pct_delta):.1f}% of portfolio value to compute shares; Review → Submit.
+Open {symbol} on Robinhood. Place {broker_action.lower()} order:
+→ Search and select {symbol}
+→ Tap Trade > {"Buy" if broker_action.lower().startswith("buy") else "Sell"}
+→ Switch to {order_type.title()} order
+→ Calculate: portfolio_value × {abs(target_pct_delta)/100:.3f} = order_amount
+→ Review order details and submit
         """,
         "ibkr": f"""
-            1) Client Portal → Trade → Order Ticket.
-            2) Symbol {symbol}; Side {"BUY" if broker_action.lower().startswith("buy") else "SELL"}; Type {"MKT" if order_type=='market' else "LMT"}.
-            3) Quantity from target allocation; TIF DAY → Submit → Transmit.
+Access IBKR order ticket for {symbol}. Execute {broker_action.lower()}:
+→ Client Portal > Trade > Order Ticket
+→ Symbol: {symbol}
+→ Side: {"BUY" if broker_action.lower().startswith("buy") else "SELL"}
+→ Type: {"MKT" if order_type=='market' else "LMT"}
+→ Calculate quantity from target allocation
+→ TIF: DAY, Submit and transmit
         """,
     }
 
+
     plat = _normalize_platform(platform)
-    step_text = steps.get(plat, f"""
-        1) Open the order ticket for {symbol}.
-        2) Choose {"BUY" if broker_action.lower().startswith("buy") else "SELL"}; {"Market" if order_type=='market' else "Limit"}.
-        3) Compute quantity from {abs(target_pct_delta):.1f}% of account value; TIF DAY → Preview → Submit.
+
+    # Get platform-specific steps
+    step_text = platform_steps.get(plat, f"""
+Access {platform} trading for {symbol}. Execute {broker_action.lower()}:
+→ Open order ticket for {symbol}
+→ Select {"BUY" if broker_action.lower().startswith("buy") else "SELL"} action
+→ Set order type: {order_type.title()}
+→ Calculate quantity from {abs(target_pct_delta):.1f}% of account value
+→ Set TIF: DAY, Preview and submit
     """)
 
-    comet = f"""COMET ACTION PLAN
+    # Comet prompt - optimized for voice commands and autonomous execution
+    prompt = f"""COMET TRADING COMMAND
 {base_directive}
 
-Execution steps:
+EXECUTION WORKFLOW:
 {textwrap.dedent(step_text).strip()}
 
-Quality checks:
-- Verify symbol/ticker matches exactly "{symbol}".
-- Avoid duplicate submission; ensure exactly one order is placed.
-- Summarize result in bullet points including execution price and order ID.
-"""
-    atlas = f"""ATLAS RUNBOOK
-Goal: {broker_action} {symbol} using {platform.title()} with {order_type.upper()} order for ≈{abs(target_pct_delta):.1f}% of account value.
+COMPLETION CHECKLIST:
+✓ Verify symbol matches: {symbol}
+✓ Confirm order type: {order_type.upper()}
+✓ Validate allocation: {abs(target_pct_delta):.1f}% of portfolio
+✓ Check order status and provide execution summary
+✓ Report: symbol, action, quantity, price, order ID, timestamp
 
-Steps (be explicit, wait for UI loads, and confirm each field):
-{textwrap.dedent(step_text).strip()}
-
-After submission: navigate to Orders/History, extract and state: symbol, side, qty, order type, limit/exec price, timestamp, status.
+VOICE COMMAND: "Execute {broker_action.lower()} order for {symbol} using {abs(target_pct_delta):.1f}% portfolio allocation on {platform}"
 """
 
-    return {"comet": comet.strip(), "atlas": atlas.strip()}
+    return prompt.strip()
 
 
 # ------------------------------ Main --------------------------------- #
@@ -589,36 +629,34 @@ def analyze_positions(portfolio_type: str, horizon: str, platform: str, position
             })
     return pd.DataFrame(rows)
 
-def generate_prompts(df_signals: pd.DataFrame, platform: str, horizon: str) -> Dict[str, List[Dict[str,str]]]:
-    prompts = {"comet": [], "atlas": []}
+def generate_prompts(df_signals: pd.DataFrame, platform: str, horizon: str) -> List[Dict[str,str]]:
+    prompts = []
     for _, r in df_signals.iterrows():
         if r.get("decision") in ["Buy","Strong Buy","Trim","Sell"]:
             side = r["decision"]
             # For simplicity, trims map to SELL, but the browser prompt explains "reduce by X%".
             broker_action = "Buy" if side in ["Buy","Strong Buy"] else "Sell"
-            p = _prompt_for_platform(platform, broker_action, r["symbol"], float(r["target_pct_delta"]), horizon)
-            prompts["comet"].append({"symbol": r["symbol"], "decision": side, "prompt": p["comet"]})
-            prompts["atlas"].append({"symbol": r["symbol"], "decision": side, "prompt": p["atlas"]})
+            prompt = _prompt_for_platform(platform, broker_action, r["symbol"], float(r["target_pct_delta"]), horizon)
+            prompts.append({"symbol": r["symbol"], "decision": side, "prompt": prompt})
     return prompts
 
-def _write_outputs(df: pd.DataFrame, prompts: Dict[str, List[Dict[str,str]]]) -> Tuple[str,str]:
+def _write_outputs(df: pd.DataFrame, prompts: List[Dict[str,str]]) -> Tuple[str,str]:
     stamp = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
     sig_path = f"signals_{stamp}.csv"
     pr_path  = f"prompts_{stamp}.txt"
     df.to_csv(sig_path, index=False)
     with open(pr_path, "w", encoding="utf-8") as f:
-        for mode in ["comet","atlas"]:
-            f.write(f"\n===== {mode.upper()} PROMPTS =====\n\n")
-            if not prompts[mode]:
-                f.write("(No actionable prompts — all Hold or no data)\n\n")
-            for item in prompts[mode]:
-                f.write(f"### {item['symbol']} — {item['decision']}\n")
-                f.write(item["prompt"])
-                f.write("\n\n---\n\n")
+        f.write("===== COMET TRADING PROMPTS =====\n\n")
+        if not prompts:
+            f.write("(No actionable prompts — all Hold or no data)\n\n")
+        for item in prompts:
+            f.write(f"### {item['symbol']} — {item['decision']}\n")
+            f.write(item["prompt"])
+            f.write("\n\n---\n\n")
     return sig_path, pr_path
 
 def main():
-    parser = argparse.ArgumentParser(description="Agentic Trading App (signals + executable prompts)")
+    parser = argparse.ArgumentParser(description="Comet Trading Agent (signals + Comet browser prompts)")
     parser.add_argument("--portfolio-type", required=True, choices=["stocks","crypto"])
     parser.add_argument("--horizon", required=True, choices=["short","medium","long"])
     parser.add_argument("--platform", required=True, help="e.g., Coinbase, Fidelity, Schwab, E*TRADE, Robinhood, IBKR")
@@ -631,12 +669,13 @@ def main():
     sig_path, pr_path = _write_outputs(df_signals, prompts)
 
     # Console summary
-    print("\n=== Agentic Trading Report ===")
+    print("\n=== COMET TRADING REPORT ===")
     print(f"Portfolio type: {args.portfolio_type} | Horizon: {args.horizon} | Platform: {args.platform}")
     print(df_signals[["symbol","close","total_score","decision","target_pct_delta"]].to_string(index=False))
     print(f"\nSaved signals to: {sig_path}")
-    print(f"Saved agentic prompts to: {pr_path}")
-    print("\nDISCLAIMER: Educational research tool. Not financial advice. Review orders before submitting.")
+    print(f"Saved Comet prompts to: {pr_path}")
+    print("\nOptimized for Perplexity Comet browser automation")
+    print("DISCLAIMER: Educational research tool. Not financial advice. Review orders before submitting.")
 
 if __name__ == "__main__":
     main()
