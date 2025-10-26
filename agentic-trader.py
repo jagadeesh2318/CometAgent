@@ -228,6 +228,11 @@ def _download_history(symbol: str, horizon: str) -> pd.DataFrame:
             df = yf.download(symbol.replace("-USD","-USDT"), period=period, interval="1d", auto_adjust=True, progress=False)
     if df.empty:
         raise RuntimeError(f"No price data for {symbol}")
+
+    # Handle MultiIndex columns that yfinance sometimes returns for single symbols
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = df.columns.droplevel(1)
+
     return df
 
 def _rsi(series: pd.Series, window: int = 14) -> pd.Series:
@@ -609,6 +614,7 @@ def analyze_positions(portfolio_type: str, horizon: str, platform: str, position
                 "nx_detail": nx_detail
             })
         except Exception as e:
+            print(f"Error processing {pos.symbol}: {str(e)}")
             rows.append({
                 "symbol": pos.symbol,
                 "error": str(e),
@@ -659,7 +665,15 @@ def main():
     # Console summary
     print("\n=== COMET TRADING REPORT ===")
     print(f"Portfolio type: {args.portfolio_type} | Horizon: {args.horizon} | Platform: {args.platform}")
-    print(df_signals[["symbol","close","total_score","decision","target_pct_delta"]].to_string(index=False))
+
+    # Select columns that exist in the DataFrame
+    available_cols = ["symbol", "decision", "target_pct_delta"]
+    if "close" in df_signals.columns:
+        available_cols.insert(1, "close")
+    if "total_score" in df_signals.columns:
+        available_cols.insert(-2, "total_score")
+
+    print(df_signals[available_cols].to_string(index=False))
     print(f"\nSaved signals to: {sig_path}")
     print(f"Saved Comet prompts to: {pr_path}")
     print("\nOptimized for Perplexity Comet browser automation")
