@@ -84,6 +84,55 @@ except Exception:
 
 # ----------------------------- Config -------------------------------- #
 
+def _load_source_weights(portfolio_type: str) -> Dict[str, float]:
+    """Load source weights from sources_weighting.md if it exists."""
+    config_path = "sources_weighting.md"
+    if not os.path.exists(config_path):
+        return {}
+
+    weights = {}
+    try:
+        with open(config_path, 'r', encoding='utf-8') as f:
+            for line_num, line in enumerate(f, 1):
+                line = line.strip()
+                if not line or line.startswith('#') or line.startswith('source'):
+                    continue
+
+                parts = [p.strip() for p in line.split(',')]
+                if len(parts) != 2:
+                    continue
+
+                source_name, weight_str = parts
+                try:
+                    weight = float(weight_str)
+                    if 1 <= weight <= 10:
+                        weights[source_name] = weight
+                except ValueError:
+                    continue
+    except Exception:
+        return {}
+
+    return weights
+
+def _get_weighted_sources(portfolio_type: str) -> List[Dict[str, any]]:
+    """Get sources with their weights applied."""
+    default_sources = DEFAULT_STOCK_SOURCES if portfolio_type == "stocks" else DEFAULT_CRYPTO_SOURCES
+    weights = _load_source_weights(portfolio_type)
+
+    if not weights:
+        # Return default sources with default weight of 5
+        return [dict(source, weight=5.0) for source in default_sources]
+
+    weighted_sources = []
+    for source in default_sources:
+        source_name = source["name"]
+        weight = weights.get(source_name, 5.0)  # Default weight of 5 if not specified
+        weighted_sources.append(dict(source, weight=weight))
+
+    # Sort by weight (descending) to prioritize higher-weighted sources
+    weighted_sources.sort(key=lambda x: x["weight"], reverse=True)
+    return weighted_sources
+
 DEFAULT_STOCK_SOURCES = [
     # High-impact publications (not exhaustive). These serve both as human references
     # and for optional RSS lookups if you add/point to RSS feeds you prefer.
@@ -360,21 +409,44 @@ def _score_ta(ind: Indicators, horizon: str) -> Tuple[float,str]:
 
     return max(min(score, 1.0), -1.0), "; ".join(parts)
 
-def _sentiment_vader(texts: List[str]) -> float:
+def _sentiment_vader(texts: List[str], weights: Optional[List[float]] = None) -> float:
     if not texts: return 0.0
     if _VADER is None: return 0.0
-    vals = [_VADER.polarity_scores(t)["compound"] for t in texts if t and isinstance(t, str)]
+
+    vals = []
+    text_weights = []
+
+    for i, t in enumerate(texts):
+        if t and isinstance(t, str):
+            sentiment = _VADER.polarity_scores(t)["compound"]
+            vals.append(sentiment)
+            # Use provided weight or default weight of 1.0
+            weight = weights[i] if weights and i < len(weights) else 1.0
+            text_weights.append(weight)
+
     if not vals: return 0.0
-    # clamp to [-1,1] and average
-    return float(np.mean(vals))
+
+    # Calculate weighted average, normalized by total weights
+    total_weight = sum(text_weights)
+    if total_weight == 0: return 0.0
+
+    weighted_sum = sum(val * weight for val, weight in zip(vals, text_weights))
+    weighted_avg = weighted_sum / total_weight
+
+    # clamp to [-1,1]
+    return float(np.clip(weighted_avg, -1.0, 1.0))
 
 def _fetch_news_with_timeout(symbol: str, timeout: int = 10) -> List[dict]:
     """Fetch news with timeout - disabled for now to prevent hanging"""
     return []  # Return empty list to prevent hanging
 
-def _news_titles_for_symbol(symbol: str, portfolio_type: str, limit: int = 20) -> List[str]:
+def _news_titles_for_symbol(symbol: str, portfolio_type: str, limit: int = 20) -> Tuple[List[str], List[float]]:
     titles = []
+    weights = []
+    weighted_sources = _get_weighted_sources(portfolio_type)
+
     # Try Yahoo Finance news via yfinance with timeout
+    yahoo_weight = next((s["weight"] for s in weighted_sources if "Yahoo Finance" in s["name"]), 5.0)
     try:
         news_items = _fetch_news_with_timeout(symbol, timeout=10)
 
@@ -385,19 +457,28 @@ def _news_titles_for_symbol(symbol: str, portfolio_type: str, limit: int = 20) -
                 if re.search(rf'\b{re.escape(symbol.split("-")[0])}\b', t, re.I) or \
                    re.search(rf'\${re.escape(symbol.split("-")[0])}\b', t, re.I):
                     titles.append(t.strip())
+                    weights.append(yahoo_weight)
                 else:
                     titles.append(t.strip())
+                    weights.append(yahoo_weight)
     except (TimeoutError, Exception):
         pass
 
     # Optional: RSS blending if feedparser is present (user can swap in preferred feeds)
     if feedparser is not None:
-        RSS_CANDIDATES = [
-            # you can add ticker-specific feeds if you prefer
-            "https://feeds.cnbc.com/rss/market.rss",
-            "https://feeds.marketwatch.com/marketwatch/topstories/",
-        ]
-        for url in RSS_CANDIDATES:
+        # Use weighted sources for RSS feeds
+        source_rss_map = {
+            "CNBC Markets": "https://feeds.cnbc.com/rss/market.rss",
+            "MarketWatch": "https://feeds.marketwatch.com/marketwatch/topstories/",
+        }
+
+        for source in weighted_sources:
+            source_name = source["name"]
+            rss_url = source_rss_map.get(source_name)
+            if not rss_url:
+                continue
+
+            source_weight = source["weight"]
             try:
                 def rss_worker(result_dict, feed_url):
                     try:
@@ -406,7 +487,7 @@ def _news_titles_for_symbol(symbol: str, portfolio_type: str, limit: int = 20) -
                         result_dict['error'] = e
 
                 result = {'data': None, 'error': None}
-                thread = threading.Thread(target=rss_worker, args=(result, url))
+                thread = threading.Thread(target=rss_worker, args=(result, rss_url))
                 thread.daemon = True
                 thread.start()
                 thread.join(timeout=8)  # 8 second timeout for RSS
@@ -420,27 +501,36 @@ def _news_titles_for_symbol(symbol: str, portfolio_type: str, limit: int = 20) -
                 d = result['data']
                 if d:
                     for e in d.entries[:max(0, limit//2)]:
-                        titles.append(getattr(e, "title", "").strip())
+                        title = getattr(e, "title", "").strip()
+                        if title:
+                            titles.append(title)
+                            weights.append(source_weight)
             except Exception:
                 continue
 
-    # Deduplicate, keep most recent chunk
-    uniq = []
+    # Deduplicate, keep most recent chunk and corresponding weights
+    uniq_titles = []
+    uniq_weights = []
     seen = set()
-    for t in titles:
-        if t and t not in seen:
-            uniq.append(t); seen.add(t)
-    return uniq[:limit]
+    for title, weight in zip(titles, weights):
+        if title and title not in seen:
+            uniq_titles.append(title)
+            uniq_weights.append(weight)
+            seen.add(title)
+
+    # Limit results but maintain title-weight correspondence
+    final_limit = min(limit, len(uniq_titles))
+    return uniq_titles[:final_limit], uniq_weights[:final_limit]
 
 def _x_posts_for_symbol(symbol: str, handles: List[str], limit_per_handle: int = 5) -> List[str]:
     return []  # Return empty list to prevent hanging
 
 def _score_news_and_x(symbol: str, portfolio_type: str, horizon: str) -> Tuple[float,float,str]:
-    # News titles sentiment
-    news_titles = _news_titles_for_symbol(symbol, portfolio_type, limit=30)
-    news_score = _sentiment_vader(news_titles)
+    # News titles sentiment with source weighting
+    news_titles, news_weights = _news_titles_for_symbol(symbol, portfolio_type, limit=30)
+    news_score = _sentiment_vader(news_titles, news_weights)
 
-    # X posts sentiment (optional)
+    # X posts sentiment (optional) - no source weighting for X posts yet
     handles = DEFAULT_STOCK_X_HANDLES if portfolio_type=="stocks" else DEFAULT_CRYPTO_X_HANDLES
     x_posts = _x_posts_for_symbol(symbol, handles, limit_per_handle=5)
     x_score = _sentiment_vader(x_posts)
