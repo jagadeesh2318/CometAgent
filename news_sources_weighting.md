@@ -1,4 +1,4 @@
-# Source Weighting Configuration
+# News Sources Weighting Configuration
 
 This file configures the reliability weights for different financial news sources.
 Weight scale: 1 (least reliable) to 10 (most reliable)
@@ -18,3 +18,8 @@ Cointelegraph, 6
 The Block, 9
 Decrypt, 5
 Bitcoin Magazine, 6
+Kaiko (research), 8
+Glassnode (research), 9
+CryptoQuant (research), 8
+Santiment (research), 7
+DefiLlama (dashboards), 6

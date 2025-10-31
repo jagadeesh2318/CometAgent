@@ -133,14 +133,14 @@ BTC,0.5,45000,2024-01-10,Crypto allocation
 
 ### Source Weighting Configuration (Optional)
 
-You can optionally configure the reliability weighting of news sources by creating a `sources_weighting.md` file in the same directory as the script. This allows you to customize how much influence different news sources have on sentiment analysis.
+You can optionally configure the reliability weighting of both news sources and social media accounts by creating configuration files in the same directory as the script. This allows you to customize how much influence different sources have on sentiment analysis.
 
-#### Creating the Configuration File
+#### News Sources Configuration
 
-Create a file named `sources_weighting.md` with the following format:
+Create a file named `news_sources_weighting.md` to configure news source reliability:
 
 ```markdown
-# Source Weighting Configuration
+# News Sources Weighting Configuration
 
 source, weight
 Reuters Markets, 9
@@ -151,20 +151,48 @@ CNBC Markets, 7
 MarketWatch, 6
 Yahoo Finance, 6
 Seeking Alpha, 5
+CoinDesk, 8
+The Block, 9
+```
+
+#### Social Media Configuration
+
+Create a file named `social_sources_weighting.md` to configure social media account reliability:
+
+```markdown
+# Social Media Sources Weighting Configuration
+
+handle, weight
+@markets, 9
+@WSJmarkets, 8
+@ReutersBiz, 9
+@CNBCnow, 7
+@CoinDesk, 8
+@TheBlock__, 9
+https://x.com/glassnode, 9
+https://x.com/MessariCrypto, 7
 ```
 
 #### Weight Scale:
 - **1**: Least reliable source (minimal influence on sentiment)
 - **10**: Most reliable source (maximum influence on sentiment)
-- **Default**: If no config file exists, all sources use a weight of 5
+- **Default**: If no config files exist, all sources use a weight of 5
+
+#### Social Media Handle Formats:
+You can specify X/Twitter handles in any of these formats:
+- `@username`
+- `username`
+- `https://x.com/username`
+- `https://twitter.com/username`
 
 #### Behavior:
-- **With config file**: Sources are weighted according to your specified values
-- **Without config file**: All sources are weighted equally (weight = 5)
-- **Missing sources**: Any source not listed in the config uses the default weight of 5
+- **With config files**: Sources are weighted according to your specified values
+- **Without config files**: All sources are weighted equally (weight = 5)
+- **Missing sources**: Any source not listed in configs uses the default weight of 5
 - **Invalid entries**: Lines with invalid format or weights outside 1-10 range are ignored
+- **Custom sources**: You can add any X profile URL to the social config, not limited to defaults
 
-#### Supported Sources:
+#### Supported News Sources:
 
 **Stock Sources:**
 - Reuters Markets, Bloomberg Markets, WSJ Finance & Markets
@@ -174,6 +202,18 @@ Seeking Alpha, 5
 **Crypto Sources:**
 - CoinDesk, Cointelegraph, The Block, Decrypt
 - Bitcoin Magazine, Kaiko, Glassnode, CryptoQuant, Santiment, DefiLlama
+
+#### Default Social Media Accounts:
+
+**Stock-focused:**
+- @markets, @WSJmarkets, @ReutersBiz, @CNBCnow
+- @bespokeinvest, @elerianm, @TheStalwart
+- @LizAnnSonders, @lisaabramowicz1
+
+**Crypto-focused:**
+- @CoinDesk, @Cointelegraph, @TheBlock__, @decryptmedia
+- @KaikoData, @glassnode, @cryptoquant_com, @santimentfeed
+- @DefiLlama, @MessariCrypto
 
 ## Algorithm Details
 
@@ -203,15 +243,16 @@ The application calculates a comprehensive technical score using:
 1. Fetches recent headlines from Yahoo Finance for the symbol
 2. Optionally supplements with RSS feeds (CNBC, MarketWatch)
 3. Filters headlines for symbol relevance
-4. Applies source weighting (if `sources_weighting.md` exists)
+4. Applies source weighting (if `news_sources_weighting.md` exists)
 5. Applies VADER sentiment analysis with weighted averaging
 6. Higher-weighted sources have more influence on final sentiment score
 
 #### Social Media Sentiment:
-1. Uses snscrape to fetch recent X posts from trusted accounts
-2. Searches for symbol mentions from financial influencers/publications
-3. Applies VADER sentiment analysis to post content
-4. Averages sentiment across all relevant posts
+1. Uses snscrape to fetch recent X posts from configured accounts
+2. Applies source weighting (if `social_sources_weighting.md` exists)
+3. Searches for symbol mentions from financial influencers/publications
+4. Applies VADER sentiment analysis with weighted averaging
+5. Higher-weighted social accounts have more influence on final sentiment score
 
 ### Multi-Factor Score Combination
 
@@ -271,22 +312,15 @@ Contains browser automation instructions optimized for Perplexity Comet:
 ### News Sources:
 - Yahoo Finance news feeds
 - Optional RSS integration (CNBC, MarketWatch)
-- Configurable source reliability weighting via `sources_weighting.md`
+- Configurable source reliability weighting via `news_sources_weighting.md`
 - Default sources include Reuters, Bloomberg, WSJ, Financial Times, and more
 
 ### Social Media Sources:
-#### Stock-focused X accounts:
-- @markets (Bloomberg Markets)
-- @WSJmarkets (WSJ Markets)
-- @ReutersBiz (Reuters Business)
-- @CNBCnow (CNBC breaking news)
-- Financial influencers and analysts
-
-#### Crypto-focused X accounts:
-- @CoinDesk, @Cointelegraph
-- @TheBlock__, @decryptmedia
-- @glassnode, @cryptoquant_com
-- DeFi and blockchain analysts
+- Configurable X/Twitter account weighting via `social_sources_weighting.md`
+- Support for custom X profile URLs (not limited to defaults)
+- Default stock-focused accounts: @markets, @WSJmarkets, @ReutersBiz, @CNBCnow
+- Default crypto-focused accounts: @CoinDesk, @Cointelegraph, @TheBlock__, @glassnode
+- Weighted sentiment analysis based on account reliability
 
 ## Risk Management & Disclaimers
 
@@ -354,14 +388,16 @@ class Decision:
 - `_combine_scores()`: Multi-factor score combination
 - `_decide()`: Decision mapping
 - `generate_prompts()`: Agentic prompt creation
-- `_load_source_weights()`: Loads optional source reliability configuration
-- `_get_weighted_sources()`: Returns prioritized source list
+- `_load_news_source_weights()`: Loads optional news source reliability configuration
+- `_load_social_source_weights()`: Loads optional social media source reliability configuration
+- `_get_weighted_news_sources()`: Returns prioritized news source list
+- `_get_weighted_social_sources()`: Returns prioritized social media source list
 
 ## Configuration
 
 ### Customizable Elements:
 
-1. **Source Reliability Weighting**: Create `sources_weighting.md` to configure news source trust levels
+1. **Source Reliability Weighting**: Create `news_sources_weighting.md` and/or `social_sources_weighting.md` to configure source trust levels
 2. **News Sources**: Modify `DEFAULT_STOCK_SOURCES` and `DEFAULT_CRYPTO_SOURCES` (advanced users)
 3. **Social Media Accounts**: Update `DEFAULT_STOCK_X_HANDLES` and `DEFAULT_CRYPTO_X_HANDLES`
 4. **Technical Indicators**: Adjust periods and weights in scoring functions

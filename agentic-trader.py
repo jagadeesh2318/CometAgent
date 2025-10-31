@@ -84,9 +84,9 @@ except Exception:
 
 # ----------------------------- Config -------------------------------- #
 
-def _load_source_weights(portfolio_type: str) -> Dict[str, float]:
-    """Load source weights from sources_weighting.md if it exists."""
-    config_path = "sources_weighting.md"
+def _load_news_source_weights() -> Dict[str, float]:
+    """Load news source weights from news_sources_weighting.md if it exists."""
+    config_path = "news_sources_weighting.md"
     if not os.path.exists(config_path):
         return {}
 
@@ -114,10 +114,47 @@ def _load_source_weights(portfolio_type: str) -> Dict[str, float]:
 
     return weights
 
-def _get_weighted_sources(portfolio_type: str) -> List[Dict[str, any]]:
-    """Get sources with their weights applied."""
+def _load_social_source_weights() -> Dict[str, float]:
+    """Load social media source weights from social_sources_weighting.md if it exists."""
+    config_path = "social_sources_weighting.md"
+    if not os.path.exists(config_path):
+        return {}
+
+    weights = {}
+    try:
+        with open(config_path, 'r', encoding='utf-8') as f:
+            for line_num, line in enumerate(f, 1):
+                line = line.strip()
+                if not line or line.startswith('#') or line.startswith('source') or line.startswith('handle'):
+                    continue
+
+                parts = [p.strip() for p in line.split(',')]
+                if len(parts) != 2:
+                    continue
+
+                source_handle, weight_str = parts
+                try:
+                    weight = float(weight_str)
+                    if 1 <= weight <= 10:
+                        # Extract handle from X URL if provided
+                        if 'x.com/' in source_handle or 'twitter.com/' in source_handle:
+                            # Extract handle from URL like https://x.com/username or https://twitter.com/username
+                            handle = source_handle.split('/')[-1].replace('@', '')
+                        else:
+                            # Handle provided directly (remove @ if present)
+                            handle = source_handle.replace('@', '')
+                        weights[handle] = weight
+                except ValueError:
+                    continue
+    except Exception:
+        return {}
+
+    return weights
+
+def _get_weighted_news_sources(portfolio_type: str) -> List[Dict[str, any]]:
+    """Get news sources with their weights applied."""
     default_sources = DEFAULT_STOCK_SOURCES if portfolio_type == "stocks" else DEFAULT_CRYPTO_SOURCES
-    weights = _load_source_weights(portfolio_type)
+    weights = _load_news_source_weights()
 
     if not weights:
         # Return default sources with default weight of 5
@@ -128,6 +165,31 @@ def _get_weighted_sources(portfolio_type: str) -> List[Dict[str, any]]:
         source_name = source["name"]
         weight = weights.get(source_name, 5.0)  # Default weight of 5 if not specified
         weighted_sources.append(dict(source, weight=weight))
+
+    # Sort by weight (descending) to prioritize higher-weighted sources
+    weighted_sources.sort(key=lambda x: x["weight"], reverse=True)
+    return weighted_sources
+
+def _get_weighted_social_sources(portfolio_type: str) -> List[Dict[str, float]]:
+    """Get social media sources with their weights applied."""
+    default_handles = DEFAULT_STOCK_X_HANDLES if portfolio_type == "stocks" else DEFAULT_CRYPTO_X_HANDLES
+    weights = _load_social_source_weights()
+
+    if not weights:
+        # Return default handles with default weight of 5
+        return [{"handle": handle, "weight": 5.0} for handle in default_handles]
+
+    # Start with configured weighted sources
+    weighted_sources = []
+
+    # Add all sources from config file (they may include sources not in defaults)
+    for handle, weight in weights.items():
+        weighted_sources.append({"handle": handle, "weight": weight})
+
+    # Add any default handles not in config with default weight
+    for handle in default_handles:
+        if handle not in weights:
+            weighted_sources.append({"handle": handle, "weight": 5.0})
 
     # Sort by weight (descending) to prioritize higher-weighted sources
     weighted_sources.sort(key=lambda x: x["weight"], reverse=True)
@@ -443,7 +505,7 @@ def _fetch_news_with_timeout(symbol: str, timeout: int = 10) -> List[dict]:
 def _news_titles_for_symbol(symbol: str, portfolio_type: str, limit: int = 20) -> Tuple[List[str], List[float]]:
     titles = []
     weights = []
-    weighted_sources = _get_weighted_sources(portfolio_type)
+    weighted_sources = _get_weighted_news_sources(portfolio_type)
 
     # Try Yahoo Finance news via yfinance with timeout
     yahoo_weight = next((s["weight"] for s in weighted_sources if "Yahoo Finance" in s["name"]), 5.0)
@@ -522,18 +584,22 @@ def _news_titles_for_symbol(symbol: str, portfolio_type: str, limit: int = 20) -
     final_limit = min(limit, len(uniq_titles))
     return uniq_titles[:final_limit], uniq_weights[:final_limit]
 
-def _x_posts_for_symbol(symbol: str, handles: List[str], limit_per_handle: int = 5) -> List[str]:
-    return []  # Return empty list to prevent hanging
+def _x_posts_for_symbol(symbol: str, weighted_handles: List[Dict[str, float]], limit_per_handle: int = 5) -> Tuple[List[str], List[float]]:
+    """
+    Fetch X posts for symbol from weighted handles.
+    Returns (posts, weights) where weights correspond to each post's source weight.
+    """
+    return [], []  # Return empty lists to prevent hanging - implementation disabled for now
 
 def _score_news_and_x(symbol: str, portfolio_type: str, horizon: str) -> Tuple[float,float,str]:
     # News titles sentiment with source weighting
     news_titles, news_weights = _news_titles_for_symbol(symbol, portfolio_type, limit=30)
     news_score = _sentiment_vader(news_titles, news_weights)
 
-    # X posts sentiment (optional) - no source weighting for X posts yet
-    handles = DEFAULT_STOCK_X_HANDLES if portfolio_type=="stocks" else DEFAULT_CRYPTO_X_HANDLES
-    x_posts = _x_posts_for_symbol(symbol, handles, limit_per_handle=5)
-    x_score = _sentiment_vader(x_posts)
+    # X posts sentiment with source weighting
+    weighted_handles = _get_weighted_social_sources(portfolio_type)
+    x_posts, x_weights = _x_posts_for_symbol(symbol, weighted_handles, limit_per_handle=5)
+    x_score = _sentiment_vader(x_posts, x_weights)
 
     # Weighting by horizon (long gives more weight to news; short balances)
     if horizon == "short":
