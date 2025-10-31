@@ -1,6 +1,0 @@
-symbol,error,decision,target_pct_delta
-BTC-USD,"Data must be 1-dimensional, got ndarray of shape (732, 1) instead",No Data,0.0
-ETH-USD,"Data must be 1-dimensional, got ndarray of shape (732, 1) instead",No Data,0.0
-SOL-USD,"Data must be 1-dimensional, got ndarray of shape (732, 1) instead",No Data,0.0
-ADA-USD,"Data must be 1-dimensional, got ndarray of shape (732, 1) instead",No Data,0.0
-XRP-USD,"Data must be 1-dimensional, got ndarray of shape (732, 1) instead",No Data,0.0
