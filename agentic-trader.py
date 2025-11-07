@@ -248,8 +248,10 @@ DEFAULT_CRYPTO_X_HANDLES = [
 class Position:
     symbol: str
     qty: float = 0.0
-    purchase_price: Optional[float] = None
-    purchase_date: Optional[pd.Timestamp] = None
+    purchase_price: Optional[float] = None  # Average purchase price
+    purchase_date: Optional[pd.Timestamp] = None  # First purchase date
+    total_cost_basis: float = 0.0  # Total USD invested
+    transaction_count: int = 0  # Number of transactions
     notes: str = ""
 
 @dataclass
@@ -296,18 +298,65 @@ def _read_portfolio(path: str, portfolio_type: str) -> List[Position]:
         raise FileNotFoundError(path)
     ext = os.path.splitext(path)[1].lower()
     if ext in [".csv", ".txt"]:
-        df = pd.read_csv(path)
+        # Debug: show raw file content
+        with open(path, 'r') as f:
+            lines = f.readlines()[:5]
+            print("DEBUG: Raw file lines:")
+            for i, line in enumerate(lines):
+                print(f"  Line {i}: {repr(line)}")
+        
+        # Try to find header row
+        header_row = 0
+        for i, line in enumerate(lines):
+            if line.strip() and not line.strip().startswith(',,,'):
+                header_row = i
+                print(f"DEBUG: Using header row {i}: {repr(line)}")
+                break
+        
+        df = pd.read_csv(path, skiprows=header_row)
+        
+        # Clean column names
+        new_columns = []
+        for col in df.columns:
+            clean_col = str(col).lstrip('|').strip()
+            new_columns.append(clean_col)
+        df.columns = new_columns
+        print(f"DEBUG: Cleaned columns: {df.columns.tolist()}")
     elif ext in [".xls", ".xlsx"]:
         df = pd.read_excel(path)
     else:
         raise ValueError("File must be .csv or .xlsx")
 
-    cols = {c.lower(): c for c in df.columns}
+    # Handle transaction-level data format (like crypto-portfolio.csv)
+    cols = {c.lower().strip(): c for c in df.columns if c and str(c).strip()}
+    
     def pick(*options):
         for o in options:
             if o in cols: return cols[o]
         return None
 
+    # Check for transaction-level format first
+    date_col = pick("date", "purchase_date")
+    symbol_col = pick("ticker/symbol", "ticker", "symbol")
+    price_col = pick("price", "purchase_price", "cost_basis")
+    amount_col = pick("amount bought", "amount", "quantity", "shares", "qty")
+    usd_col = pick("usd spent", "usd", "cost", "total_cost")
+    transaction_type_col = pick("transaction type", "type", "action")
+    
+    # Debug output
+    print(f"DEBUG: Raw columns: {list(df.columns)}")
+    print(f"DEBUG: Column mapping: {cols}")
+    print(f"DEBUG: symbol_col={symbol_col}, amount_col={amount_col}, usd_col={usd_col}")
+    
+    if symbol_col and (amount_col or usd_col):
+        # Transaction-level format detected
+        print("DEBUG: Transaction-level format detected")
+        return _parse_transaction_format(df, portfolio_type, date_col, symbol_col, 
+                                       price_col, amount_col, usd_col, transaction_type_col)
+    else:
+        print("DEBUG: Transaction-level format NOT detected, falling back to legacy format")
+    
+    # Fall back to legacy position-level format
     sym_col = pick("ticker", "symbol")
     if not sym_col: raise ValueError("Missing column: ticker/symbol")
     qty_col = pick("quantity", "shares", "qty")
@@ -324,7 +373,107 @@ def _read_portfolio(path: str, portfolio_type: str) -> List[Position]:
         if pd_col and not pd.isna(row.get(pd_col, np.nan)):
             date = pd.to_datetime(row[pd_col], errors="coerce")
         notes = str(row[notes_col]) if notes_col and not pd.isna(row.get(notes_col, np.nan)) else ""
-        positions.append(Position(symbol=sym, qty=qty, purchase_price=pp, purchase_date=date, notes=notes))
+        total_cost = pp * qty if pp and qty else 0.0
+        positions.append(Position(symbol=sym, qty=qty, purchase_price=pp, purchase_date=date, 
+                                total_cost_basis=total_cost, transaction_count=1, notes=notes))
+    return positions
+
+def _parse_transaction_format(df: pd.DataFrame, portfolio_type: str, date_col: str, 
+                            symbol_col: str, price_col: str, amount_col: str, 
+                            usd_col: str, transaction_type_col: str) -> List[Position]:
+    """
+    Parse transaction-level CSV format and aggregate into positions with average prices.
+    """
+    from collections import defaultdict
+    import re
+    
+    # Aggregate transactions by symbol
+    positions_data = defaultdict(lambda: {
+        'total_qty': 0.0,
+        'total_cost': 0.0,
+        'transactions': [],
+        'first_date': None
+    })
+    
+    for _, row in df.iterrows():
+        # Skip empty rows or header rows
+        if pd.isna(row.get(symbol_col)) or str(row.get(symbol_col)).strip() in ['', 'ticker/symbol']:
+            continue
+            
+        symbol = _coerce_symbol(portfolio_type, str(row[symbol_col]).strip())
+        
+        # Skip if transaction type is not BUY (handle SELL later if needed)
+        if transaction_type_col and str(row.get(transaction_type_col, '')).upper() != 'BUY':
+            continue
+            
+        # Parse quantity
+        qty = 0.0
+        if amount_col and not pd.isna(row.get(amount_col)):
+            qty_str = str(row[amount_col]).replace(',', '')
+            try:
+                qty = float(qty_str)
+            except ValueError:
+                continue
+                
+        # Parse USD cost
+        usd_cost = 0.0
+        if usd_col and not pd.isna(row.get(usd_col)):
+            usd_str = str(row[usd_col]).replace('$', '').replace(',', '')
+            try:
+                usd_cost = float(usd_str)
+            except ValueError:
+                continue
+                
+        # Parse price (optional, can calculate from qty and cost)
+        price = None
+        if price_col and not pd.isna(row.get(price_col)):
+            price_str = str(row[price_col]).replace('$', '').replace(',', '').replace('"', '')
+            try:
+                price = float(price_str)
+            except ValueError:
+                pass
+                
+        # If no price but have qty and cost, calculate price
+        if not price and qty > 0 and usd_cost > 0:
+            price = usd_cost / qty
+            
+        # Parse date
+        date = None
+        if date_col and not pd.isna(row.get(date_col)):
+            date = pd.to_datetime(row[date_col], errors='coerce')
+            
+        # Aggregate data
+        if qty > 0 and usd_cost > 0:
+            pos_data = positions_data[symbol]
+            pos_data['total_qty'] += qty
+            pos_data['total_cost'] += usd_cost
+            pos_data['transactions'].append({
+                'qty': qty,
+                'cost': usd_cost,
+                'price': price,
+                'date': date
+            })
+            
+            # Track first purchase date
+            if pos_data['first_date'] is None or (date and date < pos_data['first_date']):
+                pos_data['first_date'] = date
+    
+    # Convert aggregated data to Position objects
+    positions = []
+    for symbol, data in positions_data.items():
+        if data['total_qty'] > 0 and data['total_cost'] > 0:
+            avg_price = data['total_cost'] / data['total_qty']
+            position = Position(
+                symbol=symbol,
+                qty=data['total_qty'],
+                purchase_price=avg_price,
+                purchase_date=data['first_date'],
+                total_cost_basis=data['total_cost'],
+                transaction_count=len(data['transactions']),
+                notes=f"Avg price from {len(data['transactions'])} transactions"
+            )
+            positions.append(position)
+    
     return positions
 
 def _yf_period_for_horizon(horizon: str) -> str:
