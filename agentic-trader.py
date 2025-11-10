@@ -121,6 +121,17 @@ DEFAULT_STOCK_X_HANDLES = [
     "TheStalwart",    # Joe Weisenthal
     "LizAnnSonders",  # Schwab strategist
     "lisaabramowicz1" # Bloomberg Radio
+    "kholov23"        # Mr Chart Norris
+    "SuperLuckeee"    # Michael & Esther
+    "LuxAlgo"         # Lux Algo
+    "Mr_Derivatives"  # Hiesenberg
+    "TrendSpider"     # TrendSpider
+    "StockShark16"    # optionGeek
+    "vnkumarvk"       # vnkumar trades
+    "pdicarlotrader"  # Peter Dicarlo
+    "TheLongInvest"   # The Long Investor
+    "ravisRealm"      # Ravi
+    
 ]
 
 DEFAULT_CRYPTO_X_HANDLES = [
